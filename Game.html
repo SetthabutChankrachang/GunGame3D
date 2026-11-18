@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Sci-Fi FPS - Complete Edition (Phase 1-4)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+
+    /* หน้าจอ Overlay ก่อนเริ่มเล่น */
+    #blocker {
+      position: fixed; inset: 0;
+      background: rgba(10, 15, 25, 0.88);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #fff; text-align: center; z-index: 10;
+      cursor: pointer;
+    }
+    #blocker h1 { font-size: 3rem; color: #00f0ff; text-shadow: 0 0 15px rgba(0,240,255,0.6); margin-bottom: 10px; }
+    #blocker p { font-size: 1.2rem; color: #00ff88; font-weight: bold; margin-bottom: 25px; }
+    .controls-box {
+      background: rgba(255,255,255,0.08); padding: 18px 32px;
+      border-radius: 8px; border: 1px solid rgba(0,240,255,0.3);
+      line-height: 1.9; font-size: 0.95rem; color: #e2e8f0;
+    }
+
+    /* HUD ระหว่างเล่น */
+    #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+    
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      width: 20px; height: 20px; transform: translate(-50%, -50%);
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: #00ff88;
+      box-shadow: 0 0 4px #000;
+    }
+    #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+    #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+    #hitmarker {
+      position: absolute; top: 50%; left: 50%;
+      width: 24px; height: 24px;
+      transform: translate(-50%, -50%) rotate(45deg);
+      opacity: 0; transition: opacity 0.08s;
+    }
+    #hitmarker::before, #hitmarker::after {
+      content: ''; position: absolute; background: #ff3355;
+    }
+    #hitmarker::before { top: 11px; left: 0; width: 24px; height: 2px; }
+    #hitmarker::after { top: 0; left: 11px; width: 2px; height: 24px; }
+
+    #score-panel {
+      position: absolute; top: 20px; left: 25px;
+      color: #fff; font-size: 1.4rem; font-weight: bold;
+      text-shadow: 1px 1px 4px #000;
+    }
+    #highscore-panel {
+      font-size: 0.95rem; color: #ffaa00; margin-top: 4px;
+    }
+
+    #wave-panel {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      color: #00f0ff; font-size: 1.5rem; font-weight: bold;
+      text-shadow: 0 0 10px rgba(0,240,255,0.6); text-align: center;
+    }
+    #wave-sub { font-size: 0.95rem; color: #cbd5e1; font-weight: normal; }
+
+    #hp-panel {
+      position: absolute; bottom: 25px; left: 35px;
+      color: #00ff88; font-size: 2.1rem; font-weight: bold;
+      text-shadow: 0 0 10px rgba(0,255,136,0.4);
+    }
+
+    #ammo-panel {
+      position: absolute; bottom: 25px; right: 35px;
+      color: #00f0ff; font-size: 2.1rem; font-weight: bold;
+      text-shadow: 0 0 10px rgba(0,240,255,0.5); text-align: right;
+    }
+    #weapon-name {
+      font-size: 1rem; color: #00f0ff; letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    #reload-msg {
+      position: absolute; top: 58%; left: 50%;
+      transform: translateX(-50%); color: #ffaa00;
+      font-weight: bold; font-size: 1.1rem; display: none;
+    }
+
+    #damage-flash {
+      position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(circle, transparent 50%, rgba(255, 0, 40, 0.65) 100%);
+      opacity: 0; transition: opacity 0.15s;
+    }
+
+    #gameover-screen {
+      position: fixed; inset: 0; background: rgba(15, 5, 10, 0.92);
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      color: #fff; text-align: center; z-index: 20;
+    }
+    #gameover-screen h1 { font-size: 3.5rem; color: #ff3355; text-shadow: 0 0 20px #ff3355; margin-bottom: 10px; }
+    #restart-btn {
+      margin-top: 25px; padding: 12px 32px; font-size: 1.2rem; font-weight: bold;
+      background: #00f0ff; color: #0b101d; border: none; border-radius: 6px; cursor: pointer;
+    }
+    #restart-btn:hover { background: #66f7ff; }
+  </style>
+</head>
+<body>
+
+  <div id="blocker">
+    <h1>SCI-FI ARENA FPS</h1>
+    <p>[ คลิกที่หน้าจอเพื่อเริ่มเล่น ]</p>
+    <div class="controls-box">
+      <b>W A S D</b> : เคลื่อนที่ &nbsp;|&nbsp; <b>Shift</b> : วิ่งเร็ว &nbsp;|&nbsp; <b>Spacebar</b> : กระโดด<br>
+      <b>เมาส์</b> : หันมุมกล้อง &nbsp;|&nbsp; <b>คลิกซ้าย</b> : ยิงปืน &nbsp;|&nbsp; <b>R</b> : รีโหลดกระสุน<br>
+      <b>ปุ่ม 1 / 2 หรือ ลูกกลิ้งเมาส์</b> : สลับปืน (Pulse Rifle / Plasma Shotgun) &nbsp;|&nbsp; <b>ESC</b> : พักเกม
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="damage-flash"></div>
+    <div id="score-panel">
+      SCORE: <span id="score">0</span>
+      <div id="highscore-panel">HIGH SCORE: <span id="highscore">0</span></div>
+    </div>
+    <div id="wave-panel">
+      WAVE <span id="wave-num">1</span>
+      <div id="wave-sub">ENEMIES: <span id="enemy-count">0</span></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="hitmarker"></div>
+    <div id="reload-msg">RELOADING...</div>
+    <div id="hp-panel">HP: <span id="hp">100</span></div>
+    <div id="ammo-panel">
+      <div id="weapon-name">[1] PULSE RIFLE</div>
+      <span id="ammo">30</span> / <span id="max-ammo">30</span>
+    </div>
+  </div>
+
+  <div id="gameover-screen">
+    <h1>SYSTEM OFFLINE</h1>
+    <p style="font-size: 1.3rem;">คุณรอดชีวิตถึง <b>WAVE <span id="final-wave">1</span></b> | คะแนนรวม: <b><span id="final-score">0</span></b></p>
+    <p style="font-size: 1.1rem; color: #ffaa00; margin-top: 8px;">สถิติสูงสุด (HIGH SCORE): <b><span id="final-highscore">0</span></b></p>
+    <button id="restart-btn" onclick="location.reload()">เริ่มเกมใหม่ (RESTART)</button>
+  </div>
+
+  <!-- โหลด Three.js เวอร์ชันเสถียรผ่าน CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    // ==========================================
+    // 1. ระบบเสียงสังเคราะห์ (Web Audio API)
+    // ==========================================
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playShoot() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+
+        const bufferSize = this.ctx.sampleRate * 0.15;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1800, now);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.3, now);
+        nGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(this.ctx.destination);
+        noise.start(now);
+      }
+      playShotgun() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(130, now);
+        osc.frequency.exponentialRampToValueAtTime(28, now + 0.25);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+
+        const bufferSize = this.ctx.sampleRate * 0.28;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1200, now);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.45, now);
+        nGain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(this.ctx.destination);
+        noise.start(now);
+      }
+      playHit() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(900, now);
+        osc.frequency.exponentialRampToValueAtTime(1400, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      }
+      playReload() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [0, 0.25].forEach((delay, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(idx === 0 ? 400 : 650, now + delay);
+          gain.gain.setValueAtTime(0.2, now + delay);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + delay);
+          osc.stop(now + delay + 0.08);
+        });
+      }
+      playEmpty() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1200, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.03);
+      }
+      playDamage() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(110, now);
+        osc.frequency.linearRampToValueAtTime(55, now + 0.25);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
+      playEnemyLaser() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.12);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+      playPickup() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [520, 780].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.2, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.15);
+        });
+      }
+    }
+    const sfx = new SoundFX();
+
+    // ==========================================
+    // 2. ตั้งค่าฉาก แสง และกล้อง (Three.js Setup)
+    // ==========================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b101d);
+    scene.fog = new THREE.Fog(0x0b101d, 20, 95);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.rotation.order = 'YXZ';
+    camera.position.set(0, 2, 18);
+    scene.add(camera);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0x405070, 1.2);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(20, 40, 20);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    scene.add(dirLight);
+
+    // ==========================================
+    // 3. สร้างฉากสนามฝึกซ้อมและสิ่งกีดขวาง (Phase 2)
+    // ==========================================
+    const ARENA_SIZE = 80;
+
+    const floorGeo = new THREE.PlaneGeometry(ARENA_SIZE, ARENA_SIZE);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x182232, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const gridHelper = new THREE.GridHelper(ARENA_SIZE, 40, 0x00f0ff, 0x26354d);
+    gridHelper.position.y = 0.01;
+    scene.add(gridHelper);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a3950, roughness: 0.6 });
+    [
+      { x: 0, z: -ARENA_SIZE / 2, w: ARENA_SIZE, d: 2 },
+      { x: 0, z: ARENA_SIZE / 2, w: ARENA_SIZE, d: 2 },
+      { x: -ARENA_SIZE / 2, z: 0, w: 2, d: ARENA_SIZE },
+      { x: ARENA_SIZE / 2, z: 0, w: 2, d: ARENA_SIZE },
+    ].forEach(wp => {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(wp.w, 8, wp.d), wallMat);
+      wall.position.set(wp.x, 4, wp.z);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      scene.add(wall);
+    });
+
+    const colliders = [];
+    const obstacleMeshes = [];
+
+    function createObstacle(x, y, z, w, h, d, color = 0x26354d) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      const edges = new THREE.EdgesGeometry(geo);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.35 }));
+      mesh.add(line);
+
+      const box = new THREE.Box3().setFromObject(mesh);
+      colliders.push(box);
+      obstacleMeshes.push(mesh);
+      return mesh;
+    }
+
+    // เสา 4 มุม
+    [[-15, -15], [15, -15], [-15, 15], [15, 15]].forEach(([px, pz]) => {
+      createObstacle(px, 4, pz, 3, 8, 3, 0x1e293b);
+    });
+
+    // ที่กำบัง (Cover)
+    createObstacle(0, 1.2, -10, 6, 2.4, 1.2);
+    createObstacle(-12, 1.2, 0, 1.2, 2.4, 6);
+    createObstacle(12, 1.2, 0, 1.2, 2.4, 6);
+    createObstacle(0, 1.2, 10, 6, 2.4, 1.2);
+
+    // แท่นกระโดดแบบขั้นบันได (Platforms)
+    createObstacle(-22, 0.75, -22, 5, 1.5, 5, 0x2d4059);
+    createObstacle(-22, 1.5, -28, 6, 3.0, 6, 0x364f6b);
+    createObstacle(22, 0.75, 22, 5, 1.5, 5, 0x2d4059);
+    createObstacle(22, 1.5, 28, 6, 3.0, 6, 0x364f6b);
+
+    // ==========================================
+    // 4. สร้างโมเดลปืน 3D และคลังอาวุธ (Phase 4)
+    // ==========================================
+    const gunGroup = new THREE.Group();
+    const gunBodyMat = new THREE.MeshStandardMaterial({ color: 0x222831, metalness: 0.7, roughness: 0.3 });
+    const gunAccentMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x006677 });
+
+    const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.65), gunBodyMat);
+    gunGroup.add(bodyMesh);
+
+    const barrelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 12), gunBodyMat);
+    barrelMesh.rotation.x = Math.PI / 2;
+    barrelMesh.position.set(0, 0.03, -0.45);
+    gunGroup.add(barrelMesh);
+
+    const stripeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.45), gunAccentMat);
+    stripeMesh.position.set(0, 0.04, -0.05);
+    gunGroup.add(stripeMesh);
+
+    const flashGeo = new THREE.SphereGeometry(0.09, 8, 8);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+    const muzzleFlash = new THREE.Mesh(flashGeo, flashMat);
+    muzzleFlash.position.set(0, 0.03, -0.7);
+    muzzleFlash.visible = false;
+    gunGroup.add(muzzleFlash);
+
+    const GUN_DEFAULT_POS = new THREE.Vector3(0.32, -0.28, -0.55);
+    gunGroup.position.copy(GUN_DEFAULT_POS);
+    camera.add(gunGroup);
+
+    const weapons = [
+      {
+        name: '[1] PULSE RIFLE',
+        ammo: 30,
+        maxAmmo: 30,
+        reserve: Infinity,
+        damage: 25,
+        headshotMult: 2.0,
+        pellets: 1,
+        spread: 0,
+        fireRate: 0.14,
+        recoilZ: 0.14,
+        recoilRot: 0.12,
+        color: 0x00f0ff
+      },
+      {
+        name: '[2] PLASMA SHOTGUN',
+        ammo: 6,
+        maxAmmo: 6,
+        reserve: 18,
+        damage: 18,
+        headshotMult: 1.5,
+        pellets: 6,
+        spread: 0.075,
+        fireRate: 0.65,
+        recoilZ: 0.28,
+        recoilRot: 0.25,
+        color: 0xffaa00
+      }
+    ];
+    let currentWeaponIdx = 0;
+    let lastShotTime = 0;
+
+    // ==========================================
+    // 5. ระบบอนุภาค, ไอเทมดรอป, AI ศัตรู และ Wave
+    // ==========================================
+    const particles = [];
+    const pickups = [];
+    const enemies = [];
+    const enemyLasers = [];
+    let currentWave = 1;
+    let isGameOver = false;
+
+    const waveNumEl = document.getElementById('wave-num');
+    const enemyCountEl = document.getElementById('enemy-count');
+
+    function createExplosion(pos, color = 0xff3355) {
+      const geo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+      const mat = new THREE.MeshBasicMaterial({ color });
+      for (let i = 0; i < 10; i++) {
+        const p = new THREE.Mesh(geo, mat);
+        p.position.copy(pos);
+        p.userData = {
+          vel: new THREE.Vector3(
+            (Math.random() - 0.5) * 12,
+            Math.random() * 8 + 2,
+            (Math.random() - 0.5) * 12
+          ),
+          life: 0.55
+        };
+        scene.add(p);
+        particles.push(p);
+      }
+    }
+
+    function spawnPickup(pos) {
+      if (Math.random() > 0.55) return;
+      const isHealth = Math.random() < 0.5;
+      const color = isHealth ? 0x00ff88 : 0xffaa00;
+      const geo = isHealth ? new THREE.OctahedronGeometry(0.45, 0) : new THREE.BoxGeometry(0.65, 0.45, 0.65);
+      const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 });
+      const mesh = new THREE.Mesh(geo, mat);
+
+      mesh.position.set(pos.x, 0.8, pos.z);
+      mesh.userData = { type: isHealth ? 'HP' : 'AMMO', phase: Math.random() * Math.PI * 2 };
+      scene.add(mesh);
+      pickups.push(mesh);
+    }
+
+    function createEnemyMesh() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.45, 1.5, 12), bodyMat);
+      body.position.y = 1.0;
+      body.castShadow = true;
+      group.add(body);
+
+      const headMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7 });
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.7), headMat);
+      head.position.y = 2.1;
+      head.name = 'HEAD';
+      head.castShadow = true;
+      group.add(head);
+
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2244 });
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.1), eyeMat);
+      eye.position.set(0, 2.1, 0.36);
+      group.add(eye);
+
+      return group;
+    }
+
+    function spawnEnemy(hp, speed) {
+      const enemy = createEnemyMesh();
+      const limit = (ARENA_SIZE / 2) - 5;
+
+      let valid = false;
+      let attempts = 0;
+      while (!valid && attempts < 50) {
+        attempts++;
+        const rx = (Math.random() - 0.5) * 2 * limit;
+        const rz = (Math.random() - 0.5) * 2 * limit;
+        const pos = new THREE.Vector3(rx, 0, rz);
+        const distToPlayer = pos.distanceTo(new THREE.Vector3(camera.position.x, 0, camera.position.z));
+        const box = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(rx, 1.2, rz), new THREE.Vector3(1.6, 2.4, 1.6));
+        valid = distToPlayer > 16 && !colliders.some(c => c.intersectsBox(box));
+        if (valid) enemy.position.copy(pos);
+      }
+
+      enemy.userData = {
+        hp: hp,
+        speed: speed,
+        shootCooldown: 1.5 + Math.random() * 2.0,
+        strafeDir: Math.random() < 0.5 ? 1 : -1
+      };
+      scene.add(enemy);
+      enemies.push(enemy);
+    }
+
+    function startWave(wave) {
+      currentWave = wave;
+      waveNumEl.textContent = currentWave;
+      const count = 3 + wave * 2;
+      const hp = 60 + (wave - 1) * 20;
+      const speed = Math.min(8.5, 3.8 + wave * 0.45);
+
+      for (let i = 0; i < count; i++) spawnEnemy(hp, speed);
+      enemyCountEl.textContent = enemies.length;
+    }
+
+    startWave(1);
+
+    // ==========================================
+    // 6. ระบบควบคุมผู้เล่น, ยิงปืน และ UI
+    // ==========================================
+    const blocker = document.getElementById('blocker');
+    const hud = document.getElementById('hud');
+    const scoreEl = document.getElementById('score');
+    const ammoEl = document.getElementById('ammo');
+    const maxAmmoEl = document.getElementById('max-ammo');
+    const weaponNameEl = document.getElementById('weapon-name');
+    const reloadMsg = document.getElementById('reload-msg');
+    const hitmarkerEl = document.getElementById('hitmarker');
+    const hpEl = document.getElementById('hp');
+    const damageFlash = document.getElementById('damage-flash');
+
+    let isLocked = false;
+    let score = 0;
+    let highScore = parseInt(localStorage.getItem('scifi_fps_highscore') || '0', 10);
+    document.getElementById('highscore').textContent = highScore;
+
+    let isReloading = false;
+    let playerHP = 100;
+
+    const keys = {};
+    const playerVel = new THREE.Vector3();
+    let canJump = false;
+    const PLAYER_HEIGHT = 2.0;
+
+    function updateWeaponHUD() {
+      const w = weapons[currentWeaponIdx];
+      weaponNameEl.textContent = w.name;
+      weaponNameEl.style.color = '#' + w.color.toString(16).padStart(6, '0');
+      ammoEl.textContent = w.ammo;
+      maxAmmoEl.textContent = w.reserve === Infinity ? w.maxAmmo : `${w.maxAmmo} (${w.reserve})`;
+      stripeMesh.material.color.setHex(w.color);
+      stripeMesh.material.emissive.setHex(w.color);
+      muzzleFlash.material.color.setHex(w.color);
+    }
+
+    function switchWeapon(index) {
+      if (isReloading || index === currentWeaponIdx || !weapons[index]) return;
+      currentWeaponIdx = index;
+      gunGroup.position.y = GUN_DEFAULT_POS.y - 0.25;
+      updateWeaponHUD();
+    }
+
+    function takeDamage(amount) {
+      if (isGameOver) return;
+      playerHP = Math.max(0, playerHP - amount);
+      hpEl.textContent = playerHP;
+      hpEl.style.color = playerHP <= 30 ? '#ff3355' : '#00ff88';
+      sfx.playDamage();
+
+      damageFlash.style.opacity = '1';
+      setTimeout(() => { damageFlash.style.opacity = '0'; }, 180);
+
+      if (playerHP <= 0) {
+        isGameOver = true;
+        document.exitPointerLock();
+        document.getElementById('final-wave').textContent = currentWave;
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('final-highscore').textContent = highScore;
+        document.getElementById('gameover-screen').style.display = 'flex';
+      }
+    }
+
+    blocker.addEventListener('click', () => {
+      sfx.init();
+      if (document.body.requestPointerLock) {
+        document.body.requestPointerLock();
+      }
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      isLocked = document.pointerLockElement === document.body;
+      if (!isGameOver) {
+        blocker.style.display = isLocked ? 'none' : 'flex';
+        hud.style.display = isLocked ? 'block' : 'none';
+      }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isLocked || isGameOver) return;
+      const sensitivity = 0.0022;
+      camera.rotation.y -= e.movementX * sensitivity;
+      camera.rotation.x -= e.movementY * sensitivity;
+      camera.rotation.x = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, camera.rotation.x));
+    });
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (!isLocked || isGameOver) return;
+      if (e.code === 'KeyR') reload();
+      if (e.code === 'Digit1') switchWeapon(0);
+      if (e.code === 'Digit2') switchWeapon(1);
+    });
+    document.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+    document.addEventListener('wheel', () => {
+      if (!isLocked || isGameOver) return;
+      switchWeapon(currentWeaponIdx === 0 ? 1 : 0);
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && isLocked && !isGameOver) shoot();
+    });
+
+    const raycaster = new THREE.Raycaster();
+
+    function shoot() {
+      if (isReloading || isGameOver) return;
+      const w = weapons[currentWeaponIdx];
+      const now = performance.now() / 1000;
+      if (now - lastShotTime < w.fireRate) return;
+
+      if (w.ammo <= 0) {
+        sfx.playEmpty();
+        return;
+      }
+
+      lastShotTime = now;
+      w.ammo--;
+      updateWeaponHUD();
+
+      if (currentWeaponIdx === 0) sfx.playShoot();
+      else sfx.playShotgun();
+
+      gunGroup.position.z = GUN_DEFAULT_POS.z + w.recoilZ;
+      gunGroup.rotation.x = w.recoilRot;
+      muzzleFlash.visible = true;
+      setTimeout(() => { muzzleFlash.visible = false; }, 55);
+
+      const enemyMeshes = [];
+      enemies.forEach(e => e.children.forEach(child => {
+        child.userData.parentEnemy = e;
+        enemyMeshes.push(child);
+      }));
+
+      let hitAnyEnemy = false;
+
+      for (let p = 0; p < w.pellets; p++) {
+        const spreadX = (Math.random() - 0.5) * w.spread;
+        const spreadY = (Math.random() - 0.5) * w.spread;
+        raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
+
+        const intersects = raycaster.intersectObjects([...enemyMeshes, ...obstacleMeshes]);
+        if (intersects.length > 0) {
+          const firstHit = intersects[0];
+          const hitEnemy = firstHit.object.userData.parentEnemy;
+
+          if (hitEnemy && enemies.includes(hitEnemy)) {
+            hitAnyEnemy = true;
+            const isHeadshot = firstHit.object.name === 'HEAD';
+            const dmg = isHeadshot ? w.damage * w.headshotMult : w.damage;
+            hitEnemy.userData.hp -= dmg;
+            createExplosion(firstHit.point, isHeadshot ? 0xffaa00 : 0xff3355);
+
+            if (hitEnemy.userData.hp <= 0) {
+              const deadPos = hitEnemy.position.clone();
+              createExplosion(deadPos.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff3355);
+              spawnPickup(deadPos);
+
+              scene.remove(hitEnemy);
+              enemies.splice(enemies.indexOf(hitEnemy), 1);
+
+              score += isHeadshot ? 200 : 100;
+              scoreEl.textContent = score;
+              if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('scifi_fps_highscore', highScore);
+                document.getElementById('highscore').textContent = highScore;
+              }
+              enemyCountEl.textContent = enemies.length;
+
+              if (enemies.length === 0) {
+                setTimeout(() => { if (!isGameOver) startWave(currentWave + 1); }, 2000);
+              }
+            }
+          } else if (!hitEnemy) {
+            createExplosion(firstHit.point, w.color);
+          }
+        }
+      }
+
+      if (hitAnyEnemy) {
+        sfx.playHit();
+        hitmarkerEl.style.opacity = '1';
+        setTimeout(() => { hitmarkerEl.style.opacity = '0'; }, 120);
+      }
+    }
+
+    function reload() {
+      const w = weapons[currentWeaponIdx];
+      if (isReloading || w.ammo === w.maxAmmo || w.reserve <= 0) return;
+
+      isReloading = true;
+      reloadMsg.style.display = 'block';
+      sfx.playReload();
+
+      setTimeout(() => {
+        const needed = w.maxAmmo - w.ammo;
+        const loadAmount = w.reserve === Infinity ? needed : Math.min(needed, w.reserve);
+        w.ammo += loadAmount;
+        if (w.reserve !== Infinity) w.reserve -= loadAmount;
+
+        updateWeaponHUD();
+        isReloading = false;
+        reloadMsg.style.display = 'none';
+      }, 950);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ==========================================
+    // 7. Game Loop หลัก
+    // ==========================================
+    let prevTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = performance.now();
+      const delta = Math.min((time - prevTime) / 1000, 0.1);
+      prevTime = time;
+
+      if (isLocked && !isGameOver) {
+        // 1) การเคลื่อนที่ผู้เล่น + AABB Collision
+        const speed = keys['ShiftLeft'] ? 18.0 : 10.0;
+        const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
+        const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
+
+        const moveDir = new THREE.Vector3();
+        if (keys['KeyW']) moveDir.add(forward);
+        if (keys['KeyS']) moveDir.sub(forward);
+        if (keys['KeyD']) moveDir.add(right);
+        if (keys['KeyA']) moveDir.sub(right);
+        if (moveDir.lengthSq() > 0) moveDir.normalize();
+
+        playerVel.x = moveDir.x * speed;
+        playerVel.z = moveDir.z * speed;
+
+        if (keys['Space'] && canJump) {
+          playerVel.y = 11.5;
+          canJump = false;
+        }
+        playerVel.y -= 28.0 * delta;
+
+        const PLAYER_RADIUS = 0.6;
+        const getPlayerBox = (pos) => new THREE.Box3(
+          new THREE.Vector3(pos.x - PLAYER_RADIUS, pos.y - PLAYER_HEIGHT, pos.z - PLAYER_RADIUS),
+          new THREE.Vector3(pos.x + PLAYER_RADIUS, pos.y + 0.2, pos.z + PLAYER_RADIUS)
+        );
+
+        camera.position.x += playerVel.x * delta;
+        for (const box of colliders) {
+          if (getPlayerBox(camera.position).intersectsBox(box)) {
+            camera.position.x -= playerVel.x * delta;
+            break;
+          }
+        }
+
+        camera.position.z += playerVel.z * delta;
+        for (const box of colliders) {
+          if (getPlayerBox(camera.position).intersectsBox(box)) {
+            camera.position.z -= playerVel.z * delta;
+            break;
+          }
+        }
+
+        camera.position.y += playerVel.y * delta;
+        canJump = false;
+        for (const box of colliders) {
+          if (getPlayerBox(camera.position).intersectsBox(box)) {
+            if (playerVel.y < 0) {
+              camera.position.y = box.max.y + PLAYER_HEIGHT;
+              playerVel.y = 0;
+              canJump = true;
+            } else if (playerVel.y > 0) {
+              camera.position.y = box.min.y - 0.2;
+              playerVel.y = 0;
+            }
+          }
+        }
+
+        if (camera.position.y <= PLAYER_HEIGHT) {
+          camera.position.y = PLAYER_HEIGHT;
+          playerVel.y = 0;
+          canJump = true;
+        }
+        const bound = (ARENA_SIZE / 2) - 2;
+        camera.position.x = Math.max(-bound, Math.min(bound, camera.position.x));
+        camera.position.z = Math.max(-bound, Math.min(bound, camera.position.z));
+
+        // 2) แอนิเมชันปืน
+        const isMoving = moveDir.lengthSq() > 0 && canJump;
+        const bobX = isMoving ? Math.cos(time * 0.01) * 0.012 : 0;
+        const bobY = isMoving ? Math.abs(Math.sin(time * 0.01)) * 0.012 : 0;
+        const reloadTilt = isReloading ? -0.5 : 0;
+
+        gunGroup.position.x += (GUN_DEFAULT_POS.x + bobX - gunGroup.position.x) * 15 * delta;
+        gunGroup.position.y += (GUN_DEFAULT_POS.y + bobY - gunGroup.position.y) * 15 * delta;
+        gunGroup.position.z += (GUN_DEFAULT_POS.z - gunGroup.position.z) * 15 * delta;
+        gunGroup.rotation.x += (reloadTilt - gunGroup.rotation.x) * 12 * delta;
+
+        // 3) AI ศัตรูเดินไล่ตามและยิงเลเซอร์
+        const playerPosFlat = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+
+        enemies.forEach(enemy => {
+          enemy.lookAt(playerPosFlat.x, 0, playerPosFlat.z);
+
+          const toPlayer = new THREE.Vector3().subVectors(playerPosFlat, enemy.position);
+          const dist = toPlayer.length();
+          toPlayer.normalize();
+
+          const moveStep = new THREE.Vector3();
+          if (dist > 9) {
+            moveStep.addScaledVector(toPlayer, enemy.userData.speed * delta);
+          } else {
+            const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).multiplyScalar(enemy.userData.strafeDir);
+            moveStep.addScaledVector(strafe, enemy.userData.speed * 0.6 * delta);
+          }
+
+          const testPos = enemy.position.clone().add(moveStep);
+          const enemyBox = new THREE.Box3().setFromCenterAndSize(
+            new THREE.Vector3(testPos.x, 1.2, testPos.z),
+            new THREE.Vector3(1.1, 2.2, 1.1)
+          );
+          if (!colliders.some(c => c.intersectsBox(enemyBox))) {
+            enemy.position.copy(testPos);
+          } else {
+            enemy.userData.strafeDir *= -1;
+          }
+
+          enemy.userData.shootCooldown -= delta;
+          if (enemy.userData.shootCooldown <= 0 && dist < 45) {
+            enemy.userData.shootCooldown = Math.max(0.9, 2.4 - currentWave * 0.15);
+
+            const eyePos = enemy.position.clone().add(new THREE.Vector3(0, 2.0, 0));
+            const aimDir = new THREE.Vector3().subVectors(camera.position, eyePos).normalize();
+            const wallCheck = new THREE.Raycaster(eyePos, aimDir, 0, dist);
+
+            if (wallCheck.intersectObjects(obstacleMeshes).length === 0) {
+              sfx.playEnemyLaser();
+              const laser = new THREE.Mesh(
+                new THREE.SphereGeometry(0.18, 6, 6),
+                new THREE.MeshBasicMaterial({ color: 0xff2244 })
+              );
+              laser.position.copy(eyePos);
+              laser.userData = { vel: aimDir.multiplyScalar(26), life: 2.5 };
+              scene.add(laser);
+              enemyLasers.push(laser);
+            }
+          }
+        });
+
+        // 4) อัปเดตกระสุนเลเซอร์ของศัตรู
+        for (let i = enemyLasers.length - 1; i >= 0; i--) {
+          const l = enemyLasers[i];
+          l.position.addScaledVector(l.userData.vel, delta);
+          l.userData.life -= delta;
+
+          if (l.position.distanceTo(camera.position) < 1.1) {
+            takeDamage(12);
+            scene.remove(l);
+            enemyLasers.splice(i, 1);
+            continue;
+          }
+
+          const hitWall = colliders.some(c => c.containsPoint(l.position));
+          if (hitWall || l.userData.life <= 0) {
+            scene.remove(l);
+            enemyLasers.splice(i, 1);
+          }
+        }
+      }
+
+      // 5) อัปเดตไอเทมดรอป
+      for (let i = pickups.length - 1; i >= 0; i--) {
+        const item = pickups[i];
+        item.rotation.y += 2.2 * delta;
+        item.position.y = 0.85 + Math.sin(time * 0.004 + item.userData.phase) * 0.15;
+
+        const dist = new THREE.Vector2(camera.position.x - item.position.x, camera.position.z - item.position.z).length();
+        if (dist < 1.8 && !isGameOver) {
+          sfx.playPickup();
+          if (item.userData.type === 'HP') {
+            playerHP = Math.min(100, playerHP + 30);
+            hpEl.textContent = playerHP;
+            hpEl.style.color = playerHP <= 30 ? '#ff3355' : '#00ff88';
+          } else {
+            weapons[1].reserve += 8;
+            updateWeaponHUD();
+          }
+          scene.remove(item);
+          pickups.splice(i, 1);
+        }
+      }
+
+      // 6) อัปเดตสะเก็ดระเบิด
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.userData.vel.y -= 20 * delta;
+        p.position.addScaledVector(p.userData.vel, delta);
+        p.userData.life -= delta;
+        p.scale.setScalar(Math.max(0.01, p.userData.life / 0.55));
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          particles.splice(i, 1);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
